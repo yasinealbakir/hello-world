@@ -1,30 +1,83 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9.0'
-            args '-v /root/.m2:/root/.m2'
-        }
+    agent any
+    
+    tools{
+        maven 'Maven'
+        jdk 'JDK21'
     }
+
+    environment {
+        GITHUB_REPO = 'https://github.com/yasinealbakir/hello-world.git'  
+        DOCKER_IMAGE = 'yasinealbakir/hello-world'
+        KUBECONFIG = credentials('kubeconfig-credentials-id')             
+    }
+
     stages {
+        stage('Checkout') {
+            steps {
+                echo 'Proje clone işlemi yapılıyor...'
+                git branch: 'main', url: "${GITHUB_REPO}"
+            }
+        }
+
         stage('Build') {
             steps {
-                sh 'mvn -B -DskipTests clean package'
+                echo 'Proje derleniyor ve testler çalıştırılıyor...'
+                bat 'mvn clean package'
             }
         }
-        stage('Test') {
+        
+        stage('Testing') {
             steps {
-                sh 'mvn test'
+                echo 'Proje derleniyor ve testler çalıştırılıyor...'
+                bat 'mvn clean test'
             }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
+        }
+
+        stage('Docker Build') {
+            steps {
+                echo 'Docker imajı oluşturuluyor...'
+                bat "docker build -t ${DOCKER_IMAGE}:latest ."
+            }
+        }
+
+       stage('Docker Push') {
+            steps {
+                echo 'Docker login olunuyor...'
+                withCredentials([usernamePassword(credentialsId: 'dockerHub', passwordVariable: 'dockerHubPassword', usernameVariable: 'dockerHubUser')]) {
+                    bat "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPassword}"
+                    bat 'docker push yasinealbakir/hello-world'}
+            }
+        }
+
+        stage('Deploy to K8S'){
+            steps{
+                script{
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials-id', variable: 'KUBECONFIG')]) {
+                    bat "kubectl apply --validate=false -f \"kubernetes-deployment.yaml\""
+                    bat "kubectl apply --validate=false -f \"loadbalancer.yaml\""}
+                   
                 }
+
             }
         }
-        stage('Deliver') {
-            steps {
-                sh './jenkins/scripts/deliver.sh'
-            }
+        
+        
+
+    }
+
+    post {
+        always {
+            echo 'Pipeline tamamlandı.'
+            bat 'docker logout'
+        }
+        success {
+            echo 'Pipeline başarıyla tamamlandı!'
+            bat 'docker logout'
+        }
+        failure {
+            echo 'Pipeline sırasında bir hata oluştu.'
+            bat 'docker logout'
         }
     }
 }

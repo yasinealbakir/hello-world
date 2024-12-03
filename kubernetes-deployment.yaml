@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: jenkins-instance-deployment
+ labels:
+ app: jenkins-instance
+spec:
+ replicas: 1
+ selector:
+ matchLabels:
+ app: jenkins-instance
+ template:
+ metadata:
+ labels:
+ app: jenkins-instance
+ spec:
+ containers:
+ - name: jenkins-instance
+ image: arvadas/docker_repo:jenkins-instance
+ ports:
+ - containerPort: 5050
